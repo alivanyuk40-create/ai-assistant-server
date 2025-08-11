@@ -7,7 +7,6 @@ dotenv.config();
 
 const app = express();
 app.use(express.json());
-app.use(express.static('.'));
 
 // ===== Загружаем и разбиваем базу знаний =====
 function loadKnowledge() {
