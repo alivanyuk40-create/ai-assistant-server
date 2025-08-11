@@ -8,12 +8,53 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// Читаем файл базы знаний
-const knowledge = fs.readFileSync('./knowledge.txt', 'utf8');
+// ===== Загружаем и разбиваем базу знаний =====
+function loadKnowledge() {
+  const text = fs.readFileSync('./knowledge.txt', 'utf8');
+  const chunks = [];
+  const size = 500; // длина куска в символах
 
-// Эндпоинт для общения
+  for (let i = 0; i < text.length; i += size) {
+    chunks.push(text.slice(i, i + size));
+  }
+  return chunks;
+}
+
+let knowledgeChunks = loadKnowledge();
+
+// ===== Хранилище истории диалога для сессий =====
+const sessions = new Map(); // { sessionId: [ { role, content } ] }
+
+// ===== Функция поиска релевантных кусков =====
+function findRelevantChunks(query, maxChunks = 3) {
+  const lowerQuery = query.toLowerCase();
+  // Простейший поиск по вхождению слов
+  const scored = knowledgeChunks.map(chunk => {
+    let score = 0;
+    for (const word of lowerQuery.split(/\s+/)) {
+      if (chunk.toLowerCase().includes(word)) score++;
+    }
+    return { chunk, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, maxChunks).map(s => s.chunk);
+}
+
+// ===== Эндпоинт для общения =====
 app.post('/chat', async (req, res) => {
-  const userMessage = req.body.message || '';
+  const { message, sessionId } = req.body;
+  if (!message || !sessionId) {
+    return res.status(400).json({ error: 'message и sessionId обязательны' });
+  }
+
+  // Загружаем историю
+  let history = sessions.get(sessionId) || [];
+
+  // Ищем релевантные знания
+  const relevant = findRelevantChunks(message).join('\n---\n');
+
+  // Добавляем текущее сообщение в историю
+  history.push({ role: 'user', content: message });
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -28,12 +69,11 @@ app.post('/chat', async (req, res) => {
           {
             role: 'system',
             content: `
-Ты — Эля, онлайн-консультант питомника "Алива".
-Используй следующую базу знаний при ответах на вопросы:
-${knowledge}, который выращивает и продаёт:
-— плетёные деревья из ивы,
-— живые плетёные изгороди,
-— ивовый прут для плетения.
+Ты — Эля, дружелюбный и грамотный онлайн-консультант питомника "Алива".
+Ты помогаешь клиентам выбрать и приобрести растения, особенно прут.
+Отвечай подробно, дружелюбно, без спешки.
+Используй релевантную базу знаний ниже для ответов:
+${relevant}
 Твоя задача — помочь посетителю сайта разобраться в ассортименте, ответить на вопросы про размеры, цены, сроки выращивания и доставки, а также про уход за ивой.
 
 Важно:
@@ -59,17 +99,20 @@ ${knowledge}, который выращивает и продаёт:
 Группа в ВК https://vk.com/alivanyuk
 `
           },
-          {
-            role: 'user',
-            content: userMessage
-          }
+          ...history
         ],
         temperature: 0.7
       })
     });
 
     const data = await response.json();
-    res.json({ reply: data.choices[0].message.content });
+    const reply = data.choices[0].message.content;
+
+    // Сохраняем ответ в историю
+    history.push({ role: 'assistant', content: reply });
+    sessions.set(sessionId, history.slice(-20)); // храним только последние 20 сообщений
+
+    res.json({ reply });
 
   } catch (error) {
     console.error(error);
