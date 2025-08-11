@@ -12,14 +12,16 @@ import cors from 'cors';
 app.use(cors());
 
 // ===== Загружаем и разбиваем базу знаний =====
-function loadKnowledge() {
-  const text = fs.readFileSync('./knowledge.txt', 'utf8');
-  const chunks = [];
-  const size = 500; // длина куска в символах
+import fs from 'fs';
 
-  for (let i = 0; i < text.length; i += size) {
-    chunks.push(text.slice(i, i + size));
-  }
+function loadKnowledge() {
+  // Читаем JSON-файл и парсим в массив объектов
+  const raw = fs.readFileSync('./knowledge.json', 'utf8');
+  const data = JSON.parse(raw);
+
+  // Извлекаем из каждого объекта поле text
+  const chunks = data.map(item => item.text);
+
   return chunks;
 }
 
