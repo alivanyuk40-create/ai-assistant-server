@@ -8,6 +8,9 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
+import cors from 'cors';
+app.use(cors());
+
 // ===== Загружаем и разбиваем базу знаний =====
 function loadKnowledge() {
   const text = fs.readFileSync('./knowledge.txt', 'utf8');
