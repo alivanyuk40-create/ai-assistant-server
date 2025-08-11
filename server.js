@@ -118,9 +118,9 @@ ${relevant}
     res.json({ reply });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Ошибка при обращении к OpenAI API');
-  }
+  console.error('OpenAI API error:', error);
+  res.status(500).json({ error: error.message });
+}
 });
 
 // Запуск сервера
