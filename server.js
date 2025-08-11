@@ -1,4 +1,3 @@
-// server.js
 import express from 'express';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
@@ -6,36 +5,29 @@ import fs from 'fs';
 
 dotenv.config();
 
-const knowledge = fs.readFileSync('./knowledge.txt', 'utf8');
-const cors = require('cors');
 const app = express();
-app.use(cors());
 app.use(express.json());
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-if (!OPENAI_KEY) {
-  console.error('Set OPENAI_API_KEY in .env');
-  process.exit(1);
-}
+// Читаем файл базы знаний
+const knowledge = fs.readFileSync('./knowledge.txt', 'utf8');
 
-// Простейшая in-memory "память" по сессиям (для demo). Для реального проекта замените на DB.
-const sessions = new Map(); // sessionId -> [{role:'user'|'assistant', content:''}, ...]
+// Эндпоинт для общения
+app.post('/chat', async (req, res) => {
+  const userMessage = req.body.message || '';
 
-app.post('/api/chat', async (req, res) => {
   try {
-    const { sessionId, message } = req.body;
-    if (!message) return res.status(400).json({error:'No message'});
-
-    const history = sessions.get(sessionId) || [];
-    // Держим последние 100 сообщений (пример простой стратегии)
-    history.push({ role: 'user', content: message });
-    if (history.length > 100) history.splice(0, history.length - 100);
-
-    // Сформируем тело для OpenAI ChatCompletion (пример API v1)
-    const payload = {
-      model: "gpt-4o-mini", // замените на нужную модель у провайдера
-      messages: [
-        { role: "system", content: `
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `
 Ты — Эля, онлайн-консультант питомника "Алива".
 Используй следующую базу знаний при ответах на вопросы:
 ${knowledge}, который выращивает и продаёт:
@@ -65,44 +57,28 @@ ${knowledge}, который выращивает и продаёт:
 16. Сорта ивы: Американка и Корзиночная (в смесе) 
 17. Если клиент не даёт контакты, то предложи подписаться на наши ресурсы: Канал в телеграмме https://t.me/+rGGNvf0KH3xjYWNi
 Группа в ВК https://vk.com/alivanyuk
-` },
-        ...history
-      ],
-      max_tokens: 600,
-      temperature: 0.2
-    };
-
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+`
+          },
+          {
+            role: 'user',
+            content: userMessage
+          }
+        ],
+        temperature: 0.7
+      })
     });
 
-    if (!r.ok) {
-      const errText = await r.text();
-      console.error('LLM error', errText);
-      return res.status(500).json({ error: 'LLM error', details: errText });
-    }
+    const data = await response.json();
+    res.json({ reply: data.choices[0].message.content });
 
-    const j = await r.json();
-    // Вынуть ответ (зависит от провайдера — тут стандартный путь)
-    const reply = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content
-      ? j.choices[0].message.content.trim()
-      : 'Извините, ошибка в ответе';
-
-    // Сохраняем ответ в историю
-    history.push({ role: 'assistant', content: reply });
-    sessions.set(sessionId, history);
-
-    res.json({ reply });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'server error', details: err.message });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Ошибка при обращении к OpenAI API');
   }
 });
 
+// Запуск сервера
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, ()=> console.log(`Server started on ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Сервер запущен на порту ${PORT}`);
+});
