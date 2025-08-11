@@ -1,3 +1,7 @@
+import fs from 'fs';
+
+const knowledge = fs.readFileSync('./knowledge.txt', 'utf8');
+
 // server.js
 require('dotenv').config();
 const express = require('express');
