@@ -43,9 +43,11 @@ function findRelevantChunks(query, maxChunks = 3) {
 // ===== Эндпоинт для общения =====
 app.post('/chat', async (req, res) => {
   const { message, sessionId } = req.body;
-  if (!message || !sessionId) {
-    return res.status(400).json({ error: 'message и sessionId обязательны' });
+  if (!message) {
+    return res.status(400).send('Message is required');
   }
+  // ...
+});
 
   // Загружаем историю
   let history = sessions.get(sessionId) || [];
