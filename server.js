@@ -1,11 +1,12 @@
+// server.js
+import express from 'express';
+import fetch from 'node-fetch';
+import dotenv from 'dotenv';
 import fs from 'fs';
 
-const knowledge = fs.readFileSync('./knowledge.txt', 'utf8');
+dotenv.config();
 
-// server.js
-require('dotenv').config();
-const express = require('express');
-const fetch = require('node-fetch'); // npm i node-fetch
+const knowledge = fs.readFileSync('./knowledge.txt', 'utf8');
 const cors = require('cors');
 const app = express();
 app.use(cors());
