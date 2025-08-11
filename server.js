@@ -123,6 +123,15 @@ ${relevant}
   }
 });
 
+// Логирование ошибок
+fetch('https://ai-assistant-server-1cxy.onrender.com/chat', {...})
+  .then(res => res.json())
+  .then(data => { /* обработка */ })
+  .catch(err => {
+    console.error('Ошибка запроса:', err);
+    alert('Ошибка связи с сервером');
+  });
+
 // Запуск сервера
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
