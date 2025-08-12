@@ -4,6 +4,10 @@ const express = require('express');
 const fetch = require('node-fetch'); // npm i node-fetch
 const cors = require('cors');
 const app = express();
+const fs = require('fs');
+const path = require('path');
+const knowledge = JSON.parse(fs.readFileSync(path.join(__dirname, 'knowledge.json'), 'utf8'));
+
 app.use(cors());
 app.use(express.json());
 
@@ -25,6 +29,32 @@ app.post('/api/chat', async (req, res) => {
     // Держим последние 10 сообщений (пример простой стратегии)
     history.push({ role: 'user', content: message });
     if (history.length > 20) history.splice(0, history.length - 20);
+// поиск по базе json перед запросом к GPT
+    function searchKnowledge(query) {
+  const lowerQuery = query.toLowerCase();
+  let relevantInfo = [];
+
+  // Поиск по товарам
+  knowledge.products.forEach(product => {
+    if (
+      lowerQuery.includes(product.name.toLowerCase()) ||
+      lowerQuery.includes(product.description.toLowerCase().split(" ")[0])
+    ) {
+      relevantInfo.push(`Товар: ${product.name}. Описание: ${product.description}.`);
+      if (product.sizes) {
+        relevantInfo.push(`Доступные размеры и цены: ${JSON.stringify(product.sizes)}`);
+      }
+    }
+  });
+
+  // Правила
+  relevantInfo.push(`Правила общения: ${knowledge.rules.join(" ")}`);
+
+  return relevantInfo.join("\n");
+}
+
+// Получаем фрагменты знаний по вопросу
+const knowledgeContext = searchKnowledge(message);
 
     // Сформируем тело для OpenAI ChatCompletion (пример API v1)
     const payload = {
@@ -59,6 +89,7 @@ app.post('/api/chat', async (req, res) => {
 17. Если клиент не даёт контакты, то предложи подписаться на наши ресурсы: Канал в телеграмме https://t.me/+rGGNvf0KH3xjYWNi
 Группа в ВК https://vk.com/alivanyuk
 `      },
+          { role: "system", content: `Данные из базы знаний:\n${knowledgeContext}` },
         ...history
       ],
       max_tokens: 600,
