@@ -1,6 +1,5 @@
 // server.js
-import dotenv from 'dotenv';
-dotenv.config();
+require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch'); // npm i node-fetch
 const cors = require('cors');
