@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "AI-ассистент компании АЛИВА с подключенной базой знаний",
   "main": "server.js",
-  "cors": "^2.8.5"
+  "cors": "^2.8.5",
   "type": "module",
   "scripts": {
   "start": "node server.js"
