@@ -1,5 +1,16 @@
 // server.js
-require('dotenv').config();
+import express from 'express';
+import fetch from 'node-fetch';
+import dotenv from 'dotenv';
+import fs from 'fs';
+
+dotenv.config();
+
+const app = express();
+app.use(express.json());
+
+// дальше твой код…
+
 const express = require('express');
 const fetch = require('node-fetch'); // npm i node-fetch
 const cors = require('cors');
