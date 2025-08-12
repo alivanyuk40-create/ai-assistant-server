@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from "cors";
 import fs from 'fs';
 import path from 'path';
 import OpenAI from 'openai';
@@ -97,5 +98,5 @@ ${relatedInfo || 'По этому вопросу нет данных в базе
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Сервер запущен на http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
