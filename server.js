@@ -1,104 +1,61 @@
-import express from 'express';
+import express from "express";
 import cors from "cors";
-import fs from 'fs';
-import path from 'path';
-import OpenAI from 'openai';
-import bodyParser from 'body-parser';
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import OpenAI from "openai";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(bodyParser.json());
-
-// Загружаем knowledge.json безопасно
-let knowledge = [];
-const knowledgePath = path.join(process.cwd(), 'knowledge.json');
-
-try {
-  if (fs.existsSync(knowledgePath)) {
-    const data = fs.readFileSync(knowledgePath, 'utf8');
-    knowledge = JSON.parse(data);
-    console.log(`Загружено ${knowledge.length} записей из knowledge.json`);
-  } else {
-    console.warn('⚠ Файл knowledge.json не найден. База знаний пуста.');
-  }
-} catch (err) {
-  console.error('Ошибка загрузки knowledge.json:', err);
-  knowledge = [];
-}
-
-// Поиск по базе знаний
-function searchKnowledge(query) {
-  const lowerQuery = query.toLowerCase();
-  return knowledge.filter(item =>
-    item.text.toLowerCase().includes(lowerQuery)
-  );
-}
-
-// OpenAI API
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
 app.use(cors());
+app.use(express.json());
 
-// Маршрут чата
-app.post('/chat', async (req, res) => {
-  const userMessage = req.body.message || '';
+// Загружаем knowledge.json из той же папки
+const knowledgePath = path.join(__dirname, "knowledge.json");
+let knowledge = [];
 
-  // Поиск в knowledge.json
-  const relatedInfo = searchKnowledge(userMessage)
-    .map(item => item.text)
-    .join('\n');
+try {
+  const raw = fs.readFileSync(knowledgePath, "utf8");
+  knowledge = JSON.parse(raw);
+  console.log(`Загружено ${knowledge.length} записей из knowledge.json`);
+} catch (err) {
+  console.error("Ошибка загрузки базы знаний:", err);
+}
 
-  // Формируем системный промт
-  const prompt = `
-Ты — консультант компании АЛИВА женского пола.
-Используй следующую базу знаний, если она подходит к вопросу:
-${relatedInfo || 'По этому вопросу нет данных в базе, отвечай своими словами.'}
-Ты помогаешь клиентам выбрать и приобрести растения, особенно прут.
-Отвечай подробно, дружелюбно, без спешки.
+// Инициализация OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-Твоя задача — помочь посетителю сайта разобраться в ассортименте, ответить на вопросы про размеры, цены, сроки выращивания и доставки, а также про уход за ивой.
-
-Важно:
-
-1. Всегда уточняй, что именно хочет клиент — дерево, изгородь или прут.
-2. Не советуй клиентам самостоятельно заготавливать прут — наша продукция только готовая, выращенная и обработанная.
-3. Плетёные деревья бывают разных размеров:  
-   от 100 см.  до 180 см.
-4. Живая изгородь продаётся в виде прута в пачках по 100 шт. плетение в 2-3 прута. При плетении в 2 прута пачки хватает на 3,2 м. При плетении в 3 прута на 2 метра. Высота прута для изгороди высчитывается: Итоговая высота изгороди + 60 см.
-5. Помоги подобрать оптимальный вариант под запрос клиента, учитывай размеры участка и пожелания.  
-6. Объясняй просто и понятно, без сложных терминов.  
-7. В начале диалога приветствуй и задавай 1-2 вопроса, чтобы лучше понять потребности клиента. Спрашивай как зовут, чтобы понимать в каком роде общаться с клиентом. Всегда общайся на "Вы" 
-8. Не предлагай сразу оставить контакт — сначала дай консультацию.  
-9. В конце разговора мягко предложи оставить телефон, если клиент хочет оформить заказ или получить консультацию менеджера.  
-10. Если клиент спрашивает про сроки, говори, что урожай прута отправляется зимой (январь/февраль), а готовые деревья обычно доступны к июнь.  
-11. Подчёркивай экологичность и натуральность продукции, рассказывай о преимуществах живой ивы и плетёных деревьев.
-12. Деревья продаём только партиями от 30 шт. Оптовая отгрузка для садовых центров или крупных заказов.
-13. Отвечай по теме с добротой и пониманием — ты здесь, чтобы помочь клиенту сделать лучший выбор и почувствовать заботу.
-14. В процессе диалога твоя задача консультировать только по изгородям из ивы, деревьям из ивы. О других видах растений и изгородях речь не веди, а своди всё к ивам.
-15. Также уточни регион, чтобы понимать - доставка или самовывоз.
-16. Сорта ивы: Американка и Корзиночная (в смесе) 
-17. Если клиент не даёт контакты, то предложи подписаться на наши ресурсы: Канал в телеграмме https://t.me/+rGGNvf0KH3xjYWNi
-Группа в ВК https://vk.com/alivanyuk
-Вопрос клиента: ${userMessage}
-`;
-
+app.post("/chat", async (req, res) => {
   try {
+    const userMessage = req.body.message || "";
+
+    // Формируем системный промт с базой знаний
+    const systemPrompt = `Ты — ассистент компании АЛИВА. Вот база знаний:
+${knowledge.map((item) => `- ${item.text}`).join("\n")}
+
+Отвечай на вопросы, опираясь на эти данные, подробно и дружелюбно.`;
+
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: "gpt-4o-mini",
       messages: [
-        { role: 'system', content: prompt }
-      ]
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
     });
 
     res.json({ reply: completion.choices[0].message.content });
-  } catch (err) {
-    console.error('Ошибка OpenAI:', err);
-    res.status(500).send('Ошибка сервера: не удалось получить ответ от AI');
+  } catch (error) {
+    console.error("Ошибка OpenAI:", error);
+    res.status(500).json({ error: "Ошибка сервера" });
   }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Сервер запущен на порту ${PORT}`);
 });
