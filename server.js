@@ -11,8 +11,6 @@ app.use(express.json());
 
 // дальше твой код…
 
-const express = require('express');
-const fetch = require('node-fetch'); // npm i node-fetch
 const cors = require('cors');
 const app = express();
 app.use(cors());
