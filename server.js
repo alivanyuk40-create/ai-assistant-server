@@ -1,67 +1,56 @@
-// server.js
-require('dotenv').config();
-const express = require('express');
-const fetch = require('node-fetch'); // npm i node-fetch
-const cors = require('cors');
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import OpenAI from 'openai';
+import bodyParser from 'body-parser';
+
 const app = express();
-const fs = require('fs');
-const path = require('path');
-const knowledge = JSON.parse(fs.readFileSync(path.join(__dirname, 'knowledge.json'), 'utf8'));
+app.use(bodyParser.json());
 
-app.use(cors());
-app.use(express.json());
+// Загружаем knowledge.json безопасно
+let knowledge = [];
+const knowledgePath = path.join(process.cwd(), 'knowledge.json');
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-if (!OPENAI_KEY) {
-  console.error('Set OPENAI_API_KEY in .env');
-  process.exit(1);
+try {
+  if (fs.existsSync(knowledgePath)) {
+    const data = fs.readFileSync(knowledgePath, 'utf8');
+    knowledge = JSON.parse(data);
+    console.log(`Загружено ${knowledge.length} записей из knowledge.json`);
+  } else {
+    console.warn('⚠ Файл knowledge.json не найден. База знаний пуста.');
+  }
+} catch (err) {
+  console.error('Ошибка загрузки knowledge.json:', err);
+  knowledge = [];
 }
 
-// Простейшая in-memory "память" по сессиям (для demo). Для реального проекта замените на DB.
-const sessions = new Map(); // sessionId -> [{role:'user'|'assistant', content:''}, ...]
-
-app.post('/api/chat', async (req, res) => {
-  try {
-    const { sessionId, message } = req.body;
-    if (!message) return res.status(400).json({error:'No message'});
-
-    const history = sessions.get(sessionId) || [];
-    // Держим последние 10 сообщений (пример простой стратегии)
-    history.push({ role: 'user', content: message });
-    if (history.length > 20) history.splice(0, history.length - 20);
-// поиск по базе json перед запросом к GPT
-    function searchKnowledge(query) {
+// Поиск по базе знаний
+function searchKnowledge(query) {
   const lowerQuery = query.toLowerCase();
-  let relevantInfo = [];
-
-  // Поиск по товарам
-  knowledge.products.forEach(product => {
-    if (
-      lowerQuery.includes(product.name.toLowerCase()) ||
-      lowerQuery.includes(product.description.toLowerCase().split(" ")[0])
-    ) {
-      relevantInfo.push(`Товар: ${product.name}. Описание: ${product.description}.`);
-      if (product.sizes) {
-        relevantInfo.push(`Доступные размеры и цены: ${JSON.stringify(product.sizes)}`);
-      }
-    }
-  });
-
-  // Правила
-  relevantInfo.push(`Правила общения: ${knowledge.rules.join(" ")}`);
-
-  return relevantInfo.join("\n");
+  return knowledge.filter(item =>
+    item.text.toLowerCase().includes(lowerQuery)
+  );
 }
 
-// Получаем фрагменты знаний по вопросу
-const knowledgeContext = searchKnowledge(message);
+// OpenAI API
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
-    // Сформируем тело для OpenAI ChatCompletion (пример API v1)
-    const payload = {
-      model: "gpt-4o-mini", // замените на нужную модель у провайдера
-      messages: [
-        { role: "system", content:  `
-Ты — Эля, женского рода, дружелюбный и грамотный онлайн-консультант питомника "Алива".
+// Маршрут чата
+app.post('/chat', async (req, res) => {
+  const userMessage = req.body.message || '';
+
+  // Поиск в knowledge.json
+  const relatedInfo = searchKnowledge(userMessage)
+    .map(item => item.text)
+    .join('\n');
+
+  // Формируем системный промт
+  const prompt = `
+Ты — консультант компании АЛИВА женского пола.
+Используй следующую базу знаний, если она подходит к вопросу:
+${relatedInfo || 'По этому вопросу нет данных в базе, отвечай своими словами.'}
 Ты помогаешь клиентам выбрать и приобрести растения, особенно прут.
 Отвечай подробно, дружелюбно, без спешки.
 
@@ -88,45 +77,26 @@ const knowledgeContext = searchKnowledge(message);
 16. Сорта ивы: Американка и Корзиночная (в смесе) 
 17. Если клиент не даёт контакты, то предложи подписаться на наши ресурсы: Канал в телеграмме https://t.me/+rGGNvf0KH3xjYWNi
 Группа в ВК https://vk.com/alivanyuk
-`      },
-          { role: "system", content: `Данные из базы знаний:\n${knowledgeContext}` },
-        ...history
-      ],
-      max_tokens: 600,
-      temperature: 0.2
-    };
 
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+Вопрос клиента: ${userMessage}
+`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: prompt }
+      ]
     });
 
-    if (!r.ok) {
-      const errText = await r.text();
-      console.error('LLM error', errText);
-      return res.status(500).json({ error: 'LLM error', details: errText });
-    }
-
-    const j = await r.json();
-    // Вынуть ответ (зависит от провайдера — тут стандартный путь)
-    const reply = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content
-      ? j.choices[0].message.content.trim()
-      : 'Извините, ошибка в ответе';
-
-    // Сохраняем ответ в историю
-    history.push({ role: 'assistant', content: reply });
-    sessions.set(sessionId, history);
-
-    res.json({ reply });
+    res.json({ reply: completion.choices[0].message.content });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'server error', details: err.message });
+    console.error('Ошибка OpenAI:', err);
+    res.status(500).send('Ошибка сервера: не удалось получить ответ от AI');
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, ()=> console.log(`Server started on ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Сервер запущен на http://localhost:${PORT}`);
+});
