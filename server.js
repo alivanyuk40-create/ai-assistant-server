@@ -3,18 +3,14 @@ import express from 'express';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import cors from 'cors';
 
 dotenv.config();
 
 const app = express();
-app.use(express.json());
 
-// дальше твой код…
-
-const cors = require('cors');
-const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(cors());        // Включаем CORS
+app.use(express.json()); // Парсим JSON в теле запросов
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 if (!OPENAI_KEY) {
@@ -28,18 +24,19 @@ const sessions = new Map(); // sessionId -> [{role:'user'|'assistant', content:'
 app.post('/api/chat', async (req, res) => {
   try {
     const { sessionId, message } = req.body;
-    if (!message) return res.status(400).json({error:'No message'});
+    if (!message) return res.status(400).json({ error: 'No message' });
 
     const history = sessions.get(sessionId) || [];
-    // Держим последние 10 сообщений (пример простой стратегии)
+    // Держим последние 20 сообщений (пример простой стратегии)
     history.push({ role: 'user', content: message });
     if (history.length > 20) history.splice(0, history.length - 20);
 
-    // Сформируем тело для OpenAI ChatCompletion (пример API v1)
     const payload = {
       model: "gpt-4o-mini", // замените на нужную модель у провайдера
       messages: [
-        { role: "system", content: `
+        {
+          role: "system",
+          content: `
 Ты — Эля, дружелюбный и внимательный онлайн-консультант женского пола.
 Ты помогаешь клиентам выбрать и приобрести растения, особенно прут.
 Отвечай подробно, дружелюбно, без спешки.
@@ -67,7 +64,8 @@ app.post('/api/chat', async (req, res) => {
 16. Сорта ивы: Американка и Корзиночная (в смесе) 
 17. Если клиент не даёт контакты, то предложи подписаться на наши ресурсы: Канал в телеграмме https://t.me/+rGGNvf0KH3xjYWNi
 Группа в ВК https://vk.com/alivanyuk
-` },
+`
+        },
         ...history
       ],
       max_tokens: 600,
@@ -90,12 +88,10 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const j = await r.json();
-    // Вынуть ответ (зависит от провайдера — тут стандартный путь)
     const reply = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content
       ? j.choices[0].message.content.trim()
       : 'Извините, ошибка в ответе';
 
-    // Сохраняем ответ в историю
     history.push({ role: 'assistant', content: reply });
     sessions.set(sessionId, history);
 
@@ -107,4 +103,4 @@ app.post('/api/chat', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, ()=> console.log(`Server started on ${PORT}`));
+app.listen(PORT, () => console.log(`Server started on ${PORT}`));
