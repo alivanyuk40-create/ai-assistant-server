@@ -2,8 +2,18 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import requests
 import os
+from fastapi.middleware.cors import CORSMiddleware  # Добавили это для CORS
 
 app = FastAPI()
+
+# Добавляем CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Разрешаем со всех доменов (или укажи ["https://alivanyuk.ru"] для безопасности)
+    allow_credentials=True,
+    allow_methods=["*"],  # Разрешаем все методы (GET, POST и т.д.)
+    allow_headers=["*"],  # Разрешаем все заголовки
+)
 
 class Message(BaseModel):
     text: str
@@ -19,7 +29,7 @@ async def chat(message: Message):
     
     # Подготовка запроса к OpenAI API
     payload = {
-        "model": "gpt-4o-mini",  # Можно изменить на "gpt-4o-mini" или другую доступную модель
+        "model": "gpt-3.5-turbo",  # Можно изменить на "gpt-4o-mini" или другую доступную модель
         "messages": [
             {"role": "system", "content": "Ты ассистент по живым изгородям из ивы. Отвечай на вопросы о посадке, уходе, заказах и доставке. Используй информацию с сайта alivanyuk.ru: прут ивы для изгородей, инструкции по посадке, доставка по России. Будь полезным и дружелюбным."},
             {"role": "user", "content": message.text}
